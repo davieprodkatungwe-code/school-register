@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Parent Notifications – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Parent Notifications</h4>
+<p class="text-muted small">Parents to contact because their child was marked absent.</p>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-6 col-md-4">
+                <label class="form-label small fw-semibold">Filter by Status</label>
+                <select id="statusFilter" class="form-select" onchange="loadNotifications()">
+                    <option value="">All</option>
+                    <option value="pending" selected>Pending</option>
+                    <option value="contacted">Contacted</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-4">
+                <label class="form-label small fw-semibold">Filter by Date</label>
+                <input type="date" id="dateFilter" class="form-control" onchange="loadNotifications()">
+            </div>
+            <div class="col-12 col-md-4 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="loadNotifications()">Refresh</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold text-navy">Notifications</span>
+        <span class="badge bg-navy" id="countBadge">0</span>
+    </div>
+    <div class="list-group list-group-flush" id="notificationsList">
+        <div class="list-group-item text-muted text-center">Loading...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('dateFilter').valueAsDate = new Date();
+
+async function loadNotifications() {
+    const status = document.getElementById('statusFilter').value;
+    const date = document.getElementById('dateFilter').value;
+
+    let url = '/api/notifications?';
+    if (status) url += `status=${status}&`;
+    if (date) url += `date=${date}&`;
+
+    try {
+        const res = await api(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to load');
+
+        document.getElementById('countBadge').textContent = data.length;
+
+        const list = document.getElementById('notificationsList');
+        if (data.length === 0) {
+            list.innerHTML = '<div class="list-group-item text-muted text-center">No notifications found</div>';
+            return;
+        }
+
+        list.innerHTML = data.map(n => {
+            const statusBadge = n.status === 'pending'
+                ? '<span class="badge bg-warning text-dark">Pending</span>'
+                : '<span class="badge bg-success">Contacted</span>';
+
+            return `
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-semibold">${n.student_name}</div>
+                            <small class="text-muted">${n.admission_number} · ${n.class_name} · ${n.date}</small>
+                            <div class="mt-1 small">
+                                <strong>Parent:</strong> ${n.parent_name || 'N/A'} 
+                                ${n.parent_phone ? `· <a href="tel:${n.parent_phone}">${n.parent_phone}</a>` : ''}
+                            </div>
+                            <div class="mt-1 small text-muted">${n.message || ''}</div>
+                            ${n.contacted_by ? `<div class="mt-1 small text-success">Contacted by ${n.contacted_by}</div>` : ''}
+                        </div>
+                        <div class="text-end">
+                            ${statusBadge}
+                            ${n.status === 'pending' ? `
+                                <br><button class="btn btn-sm btn-outline-success mt-2" onclick="markContacted(${n.id})">
+                                    Mark Contacted
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        document.getElementById('notificationsList').innerHTML = `
+            <div class="list-group-item text-danger text-center">${err.message}</div>
+        `;
+    }
+}
+
+async function markContacted(id) {
+    if (!confirm('Mark this parent as contacted?')) return;
+
+    try {
+        const res = await api(`/api/notifications/${id}/contacted`, { method: 'PUT' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        loadNotifications();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+loadNotifications();
+</script>
+{% endblock %}

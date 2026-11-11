@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Class Activities – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Record Class Activity</h4>
+
+<!-- Selection Form -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-semibold">Class</label>
+                <select id="classSelect" class="form-select form-select-lg" onchange="loadSubjects()">
+                    <option value="">Select class...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-semibold">Subject</label>
+                <select id="subjectSelect" class="form-select form-select-lg">
+                    <option value="">Select subject...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-semibold">Date</label>
+                <input type="date" id="activityDate" class="form-control form-control-lg">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Activity Form -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label fw-semibold">What activity was done?</label>
+            <textarea id="description" class="form-control" rows="3" 
+                placeholder="Example: Completed exercise 5 on page 42. Students practiced solving quadratic equations."></textarea>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Participation notes (optional)</label>
+            <textarea id="participationNotes" class="form-control" rows="2" 
+                placeholder="Example: All students participated except James Kamau who arrived late."></textarea>
+        </div>
+        <button class="btn btn-primary btn-lg w-100" id="saveBtn" onclick="saveActivity()">
+            <i class="bi bi-save"></i> Save Activity
+        </button>
+    </div>
+</div>
+
+<!-- Today's Activities -->
+<div class="card">
+    <div class="card-header bg-white fw-semibold text-navy">
+        <i class="bi bi-list-check"></i> Activities recorded today
+    </div>
+    <div class="list-group list-group-flush" id="activitiesList">
+        <div class="list-group-item text-muted text-center">Select a class and date to view activities</div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 start-50 translate-middle-x p-3" style="z-index: 1100; margin-bottom: 70px;">
+    <div id="toast" class="toast align-items-center text-bg-success border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMsg"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('activityDate').valueAsDate = new Date();
+
+let allClasses = [];
+
+async function loadClasses() {
+    const res = await api('/api/classes');
+    allClasses = await res.json();
+    const select = document.getElementById('classSelect');
+    allClasses.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+}
+
+async function loadSubjects() {
+    const classId = document.getElementById('classSelect').value;
+    const subjectSelect = document.getElementById('subjectSelect');
+    subjectSelect.innerHTML = '<option value="">Select subject...</option>';
+
+    if (!classId) return;
+
+    const selectedClass = allClasses.find(c => c.id == classId);
+    if (!selectedClass) return;
+
+    const res = await api(`/api/subjects?stream=${selectedClass.stream}`);
+    const subjects = await res.json();
+
+    subjects.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        subjectSelect.appendChild(opt);
+    });
+
+    loadActivities();
+}
+
+async function loadActivities() {
+    const classId = document.getElementById('classSelect').value;
+    const date = document.getElementById('activityDate').value;
+    const list = document.getElementById('activitiesList');
+
+    if (!classId || !date) {
+        list.innerHTML = '<div class="list-group-item text-muted text-center">Select a class and date</div>';
+        return;
+    }
+
+    const res = await api(`/api/activities/${classId}?date=${date}`);
+    const activities = await res.json();
+
+    if (activities.length === 0) {
+        list.innerHTML = '<div class="list-group-item text-muted text-center">No activities recorded yet for this day</div>';
+        return;
+    }
+
+    list.innerHTML = activities.map(a => `
+        <div class="list-group-item">
+            <div class="d-flex justify-content-between">
+                <strong class="text-navy">${a.subject_name}</strong>
+                <small class="text-muted">${a.recorded_by_name}</small>
+            </div>
+            <div class="mt-1">${a.description}</div>
+            ${a.participation_notes ? `<div class="mt-1 small text-muted"><em>${a.participation_notes}</em></div>` : ''}
+        </div>
+    `).join('');
+}
+
+async function saveActivity() {
+    const classId = document.getElementById('classSelect').value;
+    const subjectId = document.getElementById('subjectSelect').value;
+    const date = document.getElementById('activityDate').value;
+    const description = document.getElementById('description').value.trim();
+    const participationNotes = document.getElementById('participationNotes').value.trim();
+
+    if (!classId || !subjectId || !date || !description) {
+        alert('Please fill in Class, Subject, Date and Activity description.');
+        return;
+    }
+
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+    try {
+        const res = await api('/api/activities', {
+            method: 'POST',
+            body: JSON.stringify({
+                class_id: parseInt(classId),
+                subject_id: parseInt(subjectId),
+                date: date,
+                description: description,
+                participation_notes: participationNotes || null
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to save');
+
+        showToast('Activity saved successfully!');
+        document.getElementById('description').value = '';
+        document.getElementById('participationNotes').value = '';
+        loadActivities();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-save"></i> Save Activity';
+    }
+}
+
+function showToast(msg) {
+    document.getElementById('toastMsg').textContent = msg;
+    const toast = new bootstrap.Toast(document.getElementById('toast'));
+    toast.show();
+}
+
+// Reload activities when date changes
+document.getElementById('activityDate').addEventListener('change', loadActivities);
+
+loadClasses();
+</script>
+{% endblock %}

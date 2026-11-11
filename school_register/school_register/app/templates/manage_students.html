@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Manage Students – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Manage Students</h4>
+
+<!-- Select Class -->
+<div class="card mb-3">
+    <div class="card-body">
+        <label class="form-label small fw-semibold">Select Class</label>
+        <select id="classSelect" class="form-select form-select-lg" onchange="loadStudents()">
+            <option value="">Choose a class...</option>
+        </select>
+    </div>
+</div>
+
+<!-- Add New Student Form -->
+<div class="card mb-3">
+    <div class="card-header bg-white fw-semibold text-navy">
+        <i class="bi bi-person-plus"></i> Add New Student
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-6">
+                <label class="form-label small">Admission Number</label>
+                <input type="text" id="admNo" class="form-control" placeholder="e.g. 1H1001">
+            </div>
+            <div class="col-6">
+                <label class="form-label small">Gender</label>
+                <select id="gender" class="form-select">
+                    <option value="">Select...</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <label class="form-label small">First Name</label>
+                <input type="text" id="firstName" class="form-control" placeholder="First name">
+            </div>
+            <div class="col-6">
+                <label class="form-label small">Last Name</label>
+                <input type="text" id="lastName" class="form-control" placeholder="Last name">
+            </div>
+            <div class="col-6">
+                <label class="form-label small">Parent Phone</label>
+                <input type="text" id="parentPhone" class="form-control" placeholder="07XXXXXXXX">
+            </div>
+            <div class="col-6">
+                <label class="form-label small">Parent Name (optional)</label>
+                <input type="text" id="parentName" class="form-control" placeholder="Parent name">
+            </div>
+            <div class="col-12 mt-2">
+                <button class="btn btn-primary w-100" onclick="addStudent()">
+                    <i class="bi bi-plus-circle"></i> Add Student
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Students List -->
+<div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold text-navy" id="classTitle">Students</span>
+        <span class="badge bg-navy" id="countBadge">0</span>
+    </div>
+    <div class="list-group list-group-flush" id="studentsList">
+        <div class="list-group-item text-muted text-center">Select a class to view students</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadClasses() {
+    const res = await api('/api/classes');
+    const classes = await res.json();
+    const select = document.getElementById('classSelect');
+    classes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+}
+
+async function loadStudents() {
+    const classId = document.getElementById('classSelect').value;
+    if (!classId) return;
+
+    const res = await api(`/api/classes/${classId}/students`);
+    const students = await res.json();
+
+    document.getElementById('classTitle').textContent = document.getElementById('classSelect').selectedOptions[0].text;
+    document.getElementById('countBadge').textContent = students.length + ' students';
+
+    const list = document.getElementById('studentsList');
+    if (students.length === 0) {
+        list.innerHTML = '<div class="list-group-item text-muted text-center">No students in this class yet</div>';
+        return;
+    }
+
+    list.innerHTML = students.map(s => `
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+                <div class="fw-semibold">${s.full_name}</div>
+                <small class="text-muted">${s.admission_number} · ${s.gender || ''} · ${s.parent_phone || ''}</small>
+            </div>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteStudent(${s.id}, '${s.full_name}')">
+                <i class="bi bi-trash"></i>
+            </button>
+        </div>
+    `).join('');
+}
+
+async function addStudent() {
+    const classId = document.getElementById('classSelect').value;
+    const admNo = document.getElementById('admNo').value.trim();
+    const firstName = document.getElementById('firstName').value.trim();
+    const lastName = document.getElementById('lastName').value.trim();
+    const gender = document.getElementById('gender').value;
+    const parentPhone = document.getElementById('parentPhone').value.trim();
+    const parentName = document.getElementById('parentName').value.trim();
+
+    if (!classId) {
+        alert('Please select a class first');
+        return;
+    }
+    if (!admNo || !firstName || !lastName) {
+        alert('Admission Number, First Name and Last Name are required');
+        return;
+    }
+
+    try {
+        const res = await api('/api/students', {
+            method: 'POST',
+            body: JSON.stringify({
+                admission_number: admNo,
+                first_name: firstName,
+                last_name: lastName,
+                class_id: parseInt(classId),
+                gender: gender || null,
+                parent_phone: parentPhone || null,
+                parent_name: parentName || null
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to add student');
+
+        alert('Student added: ' + data.full_name);
+
+        // Clear form
+        document.getElementById('admNo').value = '';
+        document.getElementById('firstName').value = '';
+        document.getElementById('lastName').value = '';
+        document.getElementById('gender').value = '';
+        document.getElementById('parentPhone').value = '';
+        document.getElementById('parentName').value = '';
+
+        loadStudents();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function deleteStudent(id, name) {
+    if (!confirm(`Remove student "${name}" from the system?`)) return;
+
+    try {
+        const res = await api(`/api/students/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to delete');
+
+        alert(data.message);
+        loadStudents();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+loadClasses();
+</script>
+{% endblock %}

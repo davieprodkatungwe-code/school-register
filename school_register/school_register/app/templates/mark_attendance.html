@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block title %}Mark Attendance{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3">Mark Attendance</h4>
+
+<!-- Selection -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-12 col-md-6">
+                <label class="form-label small fw-semibold">Class</label>
+                <select id="classSelect" class="form-select form-select-lg">
+                    <option value="">Select class...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-semibold">Date</label>
+                <input type="date" id="attendanceDate" class="form-control form-control-lg">
+            </div>
+            <div class="col-12 col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary btn-lg w-100" onclick="loadStudents()">
+                    <i class="bi bi-arrow-right"></i> Load
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick actions -->
+<div id="quickActions" class="d-none mb-3">
+    <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-success btn-sm" onclick="markAll('present')">
+            <i class="bi bi-check-all"></i> All Present
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="markAll('absent')">
+            All Absent
+        </button>
+        <span class="ms-auto text-muted small align-self-center" id="studentCount"></span>
+    </div>
+</div>
+
+<!-- Students list -->
+<div id="studentsContainer" class="d-none">
+    <div class="card">
+        <div class="list-group list-group-flush" id="studentsList"></div>
+    </div>
+
+    <div class="d-grid gap-2 mt-3">
+        <button class="btn btn-primary btn-lg" id="saveBtn" onclick="saveAttendance()">
+            <i class="bi bi-save"></i> Save Attendance
+        </button>
+    </div>
+</div>
+
+<div id="emptyState" class="text-center text-muted py-5">
+    <i class="bi bi-people" style="font-size: 3rem;"></i>
+    <p class="mt-2">Select a class and date, then click Load</p>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 start-50 translate-middle-x p-3" style="z-index: 1100; margin-bottom: 70px;">
+    <div id="toast" class="toast align-items-center text-bg-success border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body" id="toastMsg"></div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentStudents = [];
+let attendanceState = {}; // student_id -> {status, reason, communicated}
+
+document.getElementById('attendanceDate').valueAsDate = new Date();
+
+async function loadClasses() {
+    const res = await api('/api/classes');
+    const classes = await res.json();
+    const select = document.getElementById('classSelect');
+    classes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+}
+
+async function loadStudents() {
+    const classId = document.getElementById('classSelect').value;
+    const date = document.getElementById('attendanceDate').value;
+    if (!classId || !date) {
+        alert('Please select both class and date');
+        return;
+    }
+
+    const res = await api(`/api/classes/${classId}/students`);
+    currentStudents = await res.json();
+
+    // Load existing attendance if any
+    const attRes = await api(`/api/attendance/${classId}?date=${date}`);
+    const existing = await attRes.json();
+    attendanceState = {};
+    existing.forEach(r => {
+        attendanceState[r.student_id] = {
+            status: r.status,
+            reason: r.reason || '',
+            communicated: r.communicated || 'unknown'
+        };
+    });
+
+    renderStudents();
+    document.getElementById('emptyState').classList.add('d-none');
+    document.getElementById('studentsContainer').classList.remove('d-none');
+    document.getElementById('quickActions').classList.remove('d-none');
+    document.getElementById('studentCount').textContent = `${currentStudents.length} students`;
+}
+
+function renderStudents() {
+    const list = document.getElementById('studentsList');
+    list.innerHTML = '';
+
+    currentStudents.forEach(s => {
+        const state = attendanceState[s.id] || { status: null, reason: '', communicated: 'unknown' };
+        const rowClass = state.status === 'present' ? 'present' : (state.status === 'absent' ? 'absent' : '');
+
+        const div = document.createElement('div');
+        div.className = `list-group-item student-row ${rowClass}`;
+        div.id = `student-${s.id}`;
+        div.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="fw-semibold">${s.full_name}</div>
+                    <small class="text-muted">${s.admission_number}</small>
+                </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn ${state.status === 'present' ? 'btn-success' : 'btn-outline-success'}" 
+                            onclick="setStatus(${s.id}, 'present')">
+                        <i class="bi bi-check-lg"></i>
+                    </button>
+                    <button class="btn ${state.status === 'absent' ? 'btn-danger' : 'btn-outline-danger'}" 
+                            onclick="setStatus(${s.id}, 'absent')">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="reason-input mt-2 ${state.status === 'absent' ? 'show' : ''}" id="reason-${s.id}">
+                <div class="row g-2">
+                    <div class="col-12">
+                        <select class="form-select form-select-sm" onchange="updateReason(${s.id}, 'reason', this.value)">
+                            <option value="">Select reason...</option>
+                            <option value="Sick" ${state.reason === 'Sick' ? 'selected' : ''}>Sick</option>
+                            <option value="Family emergency" ${state.reason === 'Family emergency' ? 'selected' : ''}>Family emergency</option>
+                            <option value="Transport issues" ${state.reason === 'Transport issues' ? 'selected' : ''}>Transport issues</option>
+                            <option value="Permission granted" ${state.reason === 'Permission granted' ? 'selected' : ''}>Permission granted</option>
+                            <option value="Unknown / No reason" ${state.reason === 'Unknown / No reason' ? 'selected' : ''}>Unknown / No reason</option>
+                            <option value="Other" ${state.reason === 'Other' ? 'selected' : ''}>Other</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <select class="form-select form-select-sm" onchange="updateReason(${s.id}, 'communicated', this.value)">
+                            <option value="unknown" ${state.communicated === 'unknown' ? 'selected' : ''}>Parent informed?</option>
+                            <option value="yes" ${state.communicated === 'yes' ? 'selected' : ''}>Yes – Parent informed</option>
+                            <option value="no" ${state.communicated === 'no' ? 'selected' : ''}>No – Not informed</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        `;
+        list.appendChild(div);
+    });
+}
+
+function setStatus(studentId, status) {
+    if (!attendanceState[studentId]) {
+        attendanceState[studentId] = { status: null, reason: '', communicated: 'unknown' };
+    }
+    attendanceState[studentId].status = status;
+    if (status === 'present') {
+        attendanceState[studentId].reason = '';
+        attendanceState[studentId].communicated = 'unknown';
+    }
+    renderStudents();
+}
+
+function updateReason(studentId, field, value) {
+    if (!attendanceState[studentId]) return;
+    attendanceState[studentId][field] = value;
+}
+
+function markAll(status) {
+    currentStudents.forEach(s => {
+        attendanceState[s.id] = {
+            status: status,
+            reason: status === 'absent' ? (attendanceState[s.id]?.reason || '') : '',
+            communicated: status === 'absent' ? (attendanceState[s.id]?.communicated || 'unknown') : 'unknown'
+        };
+    });
+    renderStudents();
+}
+
+async function saveAttendance() {
+    const classId = document.getElementById('classSelect').value;
+    const date = document.getElementById('attendanceDate').value;
+
+    const records = currentStudents.map(s => {
+        const state = attendanceState[s.id] || { status: 'present', reason: '', communicated: 'unknown' };
+        return {
+            student_id: s.id,
+            status: state.status || 'present',
+            reason: state.reason || null,
+            communicated: state.communicated || 'unknown'
+        };
+    });
+
+    // Check that absentees have reasons
+    const missingReason = records.filter(r => r.status === 'absent' && !r.reason);
+    if (missingReason.length > 0) {
+        if (!confirm(`${missingReason.length} absentee(s) have no reason selected. Save anyway?`)) {
+            return;
+        }
+    }
+
+    const btn = document.getElementById('saveBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+
+    try {
+        const res = await api('/api/attendance/mark', {
+            method: 'POST',
+            body: JSON.stringify({
+                class_id: parseInt(classId),
+                date: date,
+                records: records
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Save failed');
+
+        showToast(data.message || 'Attendance saved!');
+    } catch (err) {
+        alert('Error: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-save"></i> Save Attendance';
+    }
+}
+
+function showToast(msg) {
+    document.getElementById('toastMsg').textContent = msg;
+    const toast = new bootstrap.Toast(document.getElementById('toast'));
+    toast.show();
+}
+
+loadClasses();
+</script>
+{% endblock %}

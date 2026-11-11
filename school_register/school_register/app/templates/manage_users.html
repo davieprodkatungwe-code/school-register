@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Manage Users – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Manage Users (Admin)</h4>
+
+<div class="card mb-3">
+    <div class="card-header bg-white fw-semibold text-navy">
+        <i class="bi bi-person-plus"></i> Create New User
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-6">
+                <label class="form-label small">Full Name</label>
+                <input type="text" id="fullName" class="form-control" placeholder="e.g. Mr. John Banda">
+            </div>
+            <div class="col-6">
+                <label class="form-label small">Username</label>
+                <input type="text" id="username" class="form-control" placeholder="e.g. johnbanda">
+            </div>
+            <div class="col-6">
+                <label class="form-label small">Password</label>
+                <input type="text" id="password" class="form-control" placeholder="Temporary password">
+            </div>
+            <div class="col-6">
+                <label class="form-label small">Role</label>
+                <select id="role" class="form-select">
+                    <option value="teacher">Teacher</option>
+                    <option value="form_teacher">Form Teacher</option>
+                    <option value="head_teacher">Head Teacher</option>
+                    <option value="bursar">Bursar</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="col-12 mt-2">
+                <button class="btn btn-primary w-100" onclick="createUser()">
+                    <i class="bi bi-plus-circle"></i> Create User
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold text-navy">All Users</span>
+        <span class="badge bg-navy" id="countBadge">0</span>
+    </div>
+    <div class="list-group list-group-flush" id="usersList">
+        <div class="list-group-item text-muted text-center">Loading...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadUsers() {
+    try {
+        const res = await api('/api/auth/users');
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || 'Failed to load users');
+        }
+        const users = await res.json();
+        document.getElementById('countBadge').textContent = users.length + ' users';
+
+        const list = document.getElementById('usersList');
+        list.innerHTML = users.map(u => `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-semibold">${u.full_name}</div>
+                    <small class="text-muted">@${u.username} · <span class="badge bg-secondary">${u.role}</span>
+                    ${u.is_active ? '' : ' · <span class="text-danger">Inactive</span>'}</small>
+                </div>
+                ${u.username !== 'admin' && u.is_active ? `
+                    <button class="btn btn-sm btn-outline-danger" onclick="deactivateUser(${u.id}, '${u.full_name}')">
+                        <i class="bi bi-person-x"></i>
+                    </button>
+                ` : (u.username === 'admin' ? '<span class="badge bg-success">Main Admin</span>' : '')}
+            </div>
+        `).join('');
+    } catch (err) {
+        document.getElementById('usersList').innerHTML = `
+            <div class="list-group-item text-danger text-center">${err.message}</div>
+        `;
+    }
+}
+
+async function createUser() {
+    const fullName = document.getElementById('fullName').value.trim();
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value.trim();
+    const role = document.getElementById('role').value;
+
+    if (!fullName || !username || !password) {
+        alert('Full Name, Username and Password are required');
+        return;
+    }
+
+    try {
+        const res = await api('/api/auth/users', {
+            method: 'POST',
+            body: JSON.stringify({
+                full_name: fullName,
+                username: username,
+                password: password,
+                role: role
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to create user');
+
+        alert(data.message);
+        document.getElementById('fullName').value = '';
+        document.getElementById('username').value = '';
+        document.getElementById('password').value = '';
+        document.getElementById('role').value = 'teacher';
+        loadUsers();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function deactivateUser(id, name) {
+    if (!confirm(`Deactivate user "${name}"? They will no longer be able to login.`)) return;
+
+    try {
+        const res = await api(`/api/auth/users/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        alert(data.message);
+        loadUsers();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+loadUsers();
+</script>
+{% endblock %}

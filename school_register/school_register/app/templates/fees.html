@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}Fees Management – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Fees Management (Bursar)</h4>
+
+<!-- Create Term -->
+<div class="card mb-3">
+    <div class="card-header bg-white fw-semibold text-navy">
+        <i class="bi bi-calendar-plus"></i> Create Fee Term
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-6 col-md-3">
+                <label class="form-label small">Term Name</label>
+                <input type="text" id="termName" class="form-control" placeholder="e.g. Term 1 2026">
+            </div>
+            <div class="col-3 col-md-2">
+                <label class="form-label small">Year</label>
+                <input type="number" id="termYear" class="form-control" value="2026">
+            </div>
+            <div class="col-3 col-md-2">
+                <label class="form-label small">Term No.</label>
+                <select id="termNumber" class="form-select">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small">Amount Expected</label>
+                <input type="number" id="amountExpected" class="form-control" placeholder="e.g. 150000">
+            </div>
+            <div class="col-6 col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="createTerm()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Status -->
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-12 col-md-5">
+                <label class="form-label small fw-semibold">Select Term</label>
+                <select id="termSelect" class="form-select form-select-lg" onchange="loadStatus()">
+                    <option value="">Choose term...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-5">
+                <label class="form-label small fw-semibold">Filter by Class (optional)</label>
+                <select id="classSelect" class="form-select form-select-lg" onchange="loadStatus()">
+                    <option value="">All Classes</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary btn-lg w-100" onclick="loadStatus()">View</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary -->
+<div id="summaryCards" class="row g-2 mb-3 d-none">
+    <div class="col-4">
+        <div class="card stat-card bg-success text-white">
+            <div class="stat-number" id="paidCount">0</div>
+            <small>Fully Paid</small>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="card stat-card bg-warning text-dark">
+            <div class="stat-number" id="partialCount">0</div>
+            <small>Partial</small>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="card stat-card bg-danger text-white">
+            <div class="stat-number" id="notPaidCount">0</div>
+            <small>Not Paid</small>
+        </div>
+    </div>
+</div>
+
+<!-- Students Fee List -->
+<div class="card">
+    <div class="card-header bg-white d-flex justify-content-between align-items-center">
+        <span class="fw-semibold text-navy" id="listTitle">Fee Status</span>
+        <span class="badge bg-navy" id="countBadge">0</span>
+    </div>
+    <div class="list-group list-group-flush" id="studentsList">
+        <div class="list-group-item text-muted text-center">Select a term to view fee status</div>
+    </div>
+</div>
+
+<!-- Record Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Record Payment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalStudentName" class="fw-semibold"></p>
+                <input type="hidden" id="modalStudentId">
+                <input type="hidden" id="modalTermId">
+                <div class="mb-3">
+                    <label class="form-label">Amount Paid</label>
+                    <input type="number" id="modalAmount" class="form-control" placeholder="Enter amount">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Receipt Number (optional)</label>
+                    <input type="text" id="modalReceipt" class="form-control">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Notes (optional)</label>
+                    <input type="text" id="modalNotes" class="form-control">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="savePayment()">Save Payment</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentTermId = null;
+
+async function loadTerms() {
+    const res = await api('/api/fees/terms');
+    const terms = await res.json();
+    const select = document.getElementById('termSelect');
+    terms.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.id;
+        opt.textContent = `${t.name} (${t.amount_expected.toLocaleString()})`;
+        select.appendChild(opt);
+    });
+}
+
+async function loadClasses() {
+    const res = await api('/api/classes');
+    const classes = await res.json();
+    const select = document.getElementById('classSelect');
+    classes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+}
+
+async function createTerm() {
+    const name = document.getElementById('termName').value.trim();
+    const year = parseInt(document.getElementById('termYear').value);
+    const termNumber = parseInt(document.getElementById('termNumber').value);
+    const amount = parseInt(document.getElementById('amountExpected').value);
+
+    if (!name || !year || !amount) {
+        alert('Please fill Term Name, Year and Amount');
+        return;
+    }
+
+    try {
+        const res = await api('/api/fees/terms', {
+            method: 'POST',
+            body: JSON.stringify({ name, year, term_number: termNumber, amount_expected: amount })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        alert(data.message);
+        location.reload();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function loadStatus() {
+    const termId = document.getElementById('termSelect').value;
+    const classId = document.getElementById('classSelect').value;
+    if (!termId) return;
+
+    currentTermId = termId;
+    let url = `/api/fees/status?term_id=${termId}`;
+    if (classId) url += `&class_id=${classId}`;
+
+    const res = await api(url);
+    const data = await res.json();
+    if (!res.ok) {
+        alert(data.detail || 'Failed to load');
+        return;
+    }
+
+    let paid = 0, partial = 0, notPaid = 0;
+    data.students.forEach(s => {
+        if (s.status === 'Paid') paid++;
+        else if (s.status === 'Partial') partial++;
+        else notPaid++;
+    });
+
+    document.getElementById('paidCount').textContent = paid;
+    document.getElementById('partialCount').textContent = partial;
+    document.getElementById('notPaidCount').textContent = notPaid;
+    document.getElementById('summaryCards').classList.remove('d-none');
+    document.getElementById('listTitle').textContent = data.term;
+    document.getElementById('countBadge').textContent = data.students.length + ' students';
+
+    const list = document.getElementById('studentsList');
+    if (data.students.length === 0) {
+        list.innerHTML = '<div class="list-group-item text-muted text-center">No students found</div>';
+        return;
+    }
+
+    list.innerHTML = data.students.map(s => {
+        let badgeClass = 'bg-danger';
+        if (s.status === 'Paid') badgeClass = 'bg-success';
+        else if (s.status === 'Partial') badgeClass = 'bg-warning text-dark';
+
+        return `
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="fw-semibold">${s.full_name}</div>
+                        <small class="text-muted">${s.admission_number} · ${s.class_name}</small>
+                        <div class="small mt-1">
+                            Expected: ${s.amount_expected.toLocaleString()} |
+                            Paid: ${s.amount_paid.toLocaleString()} |
+                            Balance: <strong>${s.balance.toLocaleString()}</strong>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        <span class="badge ${badgeClass} mb-2">${s.status}</span><br>
+                        <button class="btn btn-sm btn-outline-primary" onclick="openPaymentModal(${s.student_id}, '${s.full_name}')">
+                            + Payment
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openPaymentModal(studentId, name) {
+    document.getElementById('modalStudentId').value = studentId;
+    document.getElementById('modalTermId').value = currentTermId;
+    document.getElementById('modalStudentName').textContent = name;
+    document.getElementById('modalAmount').value = '';
+    document.getElementById('modalReceipt').value = '';
+    document.getElementById('modalNotes').value = '';
+    new bootstrap.Modal(document.getElementById('paymentModal')).show();
+}
+
+async function savePayment() {
+    const studentId = parseInt(document.getElementById('modalStudentId').value);
+    const termId = parseInt(document.getElementById('modalTermId').value);
+    const amount = parseInt(document.getElementById('modalAmount').value);
+    const receipt = document.getElementById('modalReceipt').value.trim();
+    const notes = document.getElementById('modalNotes').value.trim();
+
+    if (!amount || amount <= 0) {
+        alert('Please enter a valid amount');
+        return;
+    }
+
+    try {
+        const res = await api('/api/fees/payments', {
+            method: 'POST',
+            body: JSON.stringify({
+                student_id: studentId,
+                term_id: termId,
+                amount_paid: amount,
+                receipt_number: receipt || null,
+                notes: notes || null
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        alert(data.message);
+        bootstrap.Modal.getInstance(document.getElementById('paymentModal')).hide();
+        loadStatus();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+loadTerms();
+loadClasses();
+</script>
+{% endblock %}

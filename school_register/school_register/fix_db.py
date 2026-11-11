@@ -1,0 +1,1 @@
+from app.database import engine; from sqlalchemy import text; conn = engine.connect(); conn.execute(text("ALTER TABLE classes ADD COLUMN form_teacher_id INTEGER")); conn.commit(); print("Column added successfully") 

@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block title %}Assessments & Grades – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Assessments & Grades</h4>
+
+<!-- Create Assessment -->
+<div class="card mb-3">
+    <div class="card-header bg-white fw-semibold text-navy">
+        <i class="bi bi-plus-circle"></i> Create New Assessment / Test
+    </div>
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-12 col-md-4">
+                <label class="form-label small">Class</label>
+                <select id="classSelect" class="form-select" onchange="loadSubjects()">
+                    <option value="">Select class...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small">Subject</label>
+                <select id="subjectSelect" class="form-select">
+                    <option value="">Select subject...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small">Date</label>
+                <input type="date" id="assessmentDate" class="form-control">
+            </div>
+            <div class="col-12 col-md-6">
+                <label class="form-label small">Title</label>
+                <input type="text" id="title" class="form-control" placeholder="e.g. Continuous Test 1 - Algebra">
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label small">Total Marks</label>
+                <input type="number" id="totalMarks" class="form-control" placeholder="e.g. 20">
+            </div>
+            <div class="col-6 col-md-3 d-flex align-items-end">
+                <button class="btn btn-primary w-100" onclick="createAssessment()">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- List of Assessments -->
+<div class="card mb-3">
+    <div class="card-header bg-white fw-semibold text-navy">
+        Recent Assessments
+    </div>
+    <div class="list-group list-group-flush" id="assessmentsList">
+        <div class="list-group-item text-muted text-center">Loading...</div>
+    </div>
+</div>
+
+<!-- Enter Scores Section -->
+<div id="scoresSection" class="d-none">
+    <div class="card">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold text-navy" id="scoresTitle">Enter Marks</span>
+            <button class="btn btn-success btn-sm" onclick="saveScores()">
+                <i class="bi bi-save"></i> Save Marks
+            </button>
+        </div>
+        <div class="list-group list-group-flush" id="scoresList"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let allClasses = [];
+let currentAssessmentId = null;
+let currentTotalMarks = 20;
+
+document.getElementById('assessmentDate').valueAsDate = new Date();
+
+async function loadClasses() {
+    const res = await api('/api/classes');
+    allClasses = await res.json();
+    const select = document.getElementById('classSelect');
+    allClasses.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+}
+
+async function loadSubjects() {
+    const classId = document.getElementById('classSelect').value;
+    const subjectSelect = document.getElementById('subjectSelect');
+    subjectSelect.innerHTML = '<option value="">Select subject...</option>';
+    if (!classId) return;
+
+    const selectedClass = allClasses.find(c => c.id == classId);
+    if (!selectedClass) return;
+
+    const res = await api(`/api/subjects?stream=${selectedClass.stream}`);
+    const subjects = await res.json();
+    subjects.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name;
+        subjectSelect.appendChild(opt);
+    });
+}
+
+async function createAssessment() {
+    const classId = document.getElementById('classSelect').value;
+    const subjectId = document.getElementById('subjectSelect').value;
+    const title = document.getElementById('title').value.trim();
+    const totalMarks = parseInt(document.getElementById('totalMarks').value);
+    const date = document.getElementById('assessmentDate').value;
+
+    if (!classId || !subjectId || !title || !totalMarks || !date) {
+        alert('Please fill Class, Subject, Title, Total Marks and Date');
+        return;
+    }
+
+    try {
+        const res = await api('/api/assessments', {
+            method: 'POST',
+            body: JSON.stringify({
+                class_id: parseInt(classId),
+                subject_id: parseInt(subjectId),
+                title: title,
+                total_marks: totalMarks,
+                date: date
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        alert(data.message);
+        document.getElementById('title').value = '';
+        document.getElementById('totalMarks').value = '';
+        loadAssessments();
+        openScores(data.id);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+async function loadAssessments() {
+    const res = await api('/api/assessments');
+    const assessments = await res.json();
+    const list = document.getElementById('assessmentsList');
+
+    if (assessments.length === 0) {
+        list.innerHTML = '<div class="list-group-item text-muted text-center">No assessments yet</div>';
+        return;
+    }
+
+    list.innerHTML = assessments.map(a => `
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+                <div class="fw-semibold">${a.title}</div>
+                <small class="text-muted">${a.class_name} · ${a.subject_name} · ${a.date} · Total: ${a.total_marks}</small>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" onclick="openScores(${a.id})">
+                Enter Marks
+            </button>
+        </div>
+    `).join('');
+}
+
+async function openScores(assessmentId) {
+    currentAssessmentId = assessmentId;
+    const res = await api(`/api/assessments/${assessmentId}/scores`);
+    const data = await res.json();
+    if (!res.ok) {
+        alert(data.detail || 'Failed to load scores');
+        return;
+    }
+
+    currentTotalMarks = data.assessment.total_marks;
+    document.getElementById('scoresTitle').textContent = 
+        `${data.assessment.title} (${data.assessment.subject_name}) – Total: ${data.assessment.total_marks}`;
+
+    const list = document.getElementById('scoresList');
+    list.innerHTML = data.scores.map(s => `
+        <div class="list-group-item">
+            <div class="row g-2 align-items-center">
+                <div class="col-5">
+                    <div class="fw-semibold small">${s.full_name}</div>
+                    <small class="text-muted">${s.admission_number}</small>
+                </div>
+                <div class="col-3">
+                    <input type="number" class="form-control form-control-sm score-input" 
+                           data-student-id="${s.student_id}"
+                           value="${s.marks_obtained !== null ? s.marks_obtained : ''}"
+                           placeholder="0" min="0" max="${currentTotalMarks}">
+                </div>
+                <div class="col-4">
+                    <input type="text" class="form-control form-control-sm comment-input" 
+                           data-student-id="${s.student_id}"
+                           value="${s.comment || ''}"
+                           placeholder="Comment (optional)">
+                </div>
+            </div>
+        </div>
+    `).join('');
+
+    document.getElementById('scoresSection').classList.remove('d-none');
+    document.getElementById('scoresSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function saveScores() {
+    if (!currentAssessmentId) return;
+
+    const scoreInputs = document.querySelectorAll('.score-input');
+    const commentInputs = document.querySelectorAll('.comment-input');
+    const commentMap = {};
+    commentInputs.forEach(inp => {
+        commentMap[inp.dataset.studentId] = inp.value.trim();
+    });
+
+    const scores = [];
+    scoreInputs.forEach(inp => {
+        const studentId = parseInt(inp.dataset.studentId);
+        const val = inp.value.trim();
+        scores.push({
+            student_id: studentId,
+            marks_obtained: val === '' ? null : parseInt(val),
+            comment: commentMap[studentId] || null
+        });
+    });
+
+    try {
+        const res = await api('/api/assessments/scores', {
+            method: 'POST',
+            body: JSON.stringify({
+                assessment_id: currentAssessmentId,
+                scores: scores
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        alert(data.message);
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+loadClasses();
+loadAssessments();
+</script>
+{% endblock %}

@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Daily Report – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Daily Report (Form Teacher)</h4>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2">
+            <div class="col-12 col-md-6">
+                <label class="form-label small fw-semibold">Class</label>
+                <select id="classSelect" class="form-select form-select-lg">
+                    <option value="">Select class...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-semibold">Date</label>
+                <input type="date" id="reportDate" class="form-control form-control-lg">
+            </div>
+            <div class="col-12 col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary btn-lg w-100" onclick="loadReport()">
+                    <i class="bi bi-search"></i> View
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="reportContainer" class="d-none">
+    <!-- Summary cards -->
+    <div class="row g-2 mb-3">
+        <div class="col-4">
+            <div class="card stat-card bg-navy text-white">
+                <div class="stat-number" id="totalStudents">0</div>
+                <small>Total</small>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="card stat-card bg-success text-white">
+                <div class="stat-number" id="totalPresent">0</div>
+                <small>Present</small>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="card stat-card bg-danger text-white">
+                <div class="stat-number" id="totalAbsent">0</div>
+                <small>Absent</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-semibold" id="classNameDate"></span>
+                <span class="badge bg-secondary" id="percentageBadge">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Absentees -->
+    <div class="card mb-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold"><i class="bi bi-person-x text-danger"></i> Absentees</span>
+        </div>
+        <div class="list-group list-group-flush" id="absenteesList">
+            <div class="list-group-item text-muted text-center">No absentees</div>
+        </div>
+    </div>
+
+    <!-- Class Activities -->
+    <div class="card mb-3">
+        <div class="card-header bg-white fw-semibold text-navy">
+            <i class="bi bi-journal-text"></i> Class Activities Today
+        </div>
+        <div class="list-group list-group-flush" id="activitiesList">
+            <div class="list-group-item text-muted text-center">No activities recorded</div>
+        </div>
+    </div>
+
+        <!-- Subject Attendance Overview (Form Teacher) -->
+    <div class="card mb-3">
+        <div class="card-header bg-white fw-semibold text-navy">
+            <i class="bi bi-journal-check"></i> Subject Attendance Overview
+        </div>
+        <div class="list-group list-group-flush" id="subjectAttendanceList">
+            <div class="list-group-item text-muted text-center">Loading subject attendance...</div>
+        </div>
+    </div>
+
+    <div class="d-grid gap-2 mt-3 d-print-none">
+        <button class="btn btn-success btn-lg" id="downloadBtn" onclick="downloadExcel()">
+            <i class="bi bi-file-earmark-excel"></i> Download Excel Report
+        </button>
+        <button class="btn btn-outline-primary btn-lg" onclick="window.print()">
+            <i class="bi bi-printer"></i> Print Report
+        </button>
+    </div>
+</div>
+
+<div id="emptyState" class="text-center text-muted py-5">
+    <i class="bi bi-file-earmark-text" style="font-size: 3rem;"></i>
+    <p class="mt-2">Select class and date to view the report</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('reportDate').valueAsDate = new Date();
+
+async function loadClasses() {
+    const res = await api('/api/classes');
+    const classes = await res.json();
+    const select = document.getElementById('classSelect');
+    classes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+}
+
+async function loadReport() {
+    const classId = document.getElementById('classSelect').value;
+    const date = document.getElementById('reportDate').value;
+    if (!classId || !date) {
+        alert('Please select both class and date');
+        return;
+    }
+
+    // Load attendance report
+    const res = await api(`/api/report/${classId}?date=${date}`);
+    const data = await res.json();
+    if (!res.ok) {
+        alert(data.detail || 'Failed to load report');
+        return;
+    }
+
+    document.getElementById('totalStudents').textContent = data.total_students;
+    document.getElementById('totalPresent').textContent = data.total_present;
+    document.getElementById('totalAbsent').textContent = data.total_absent;
+    document.getElementById('percentageBadge').textContent = data.present_percentage + '% Present';
+    document.getElementById('classNameDate').textContent = `${data.class_name} — ${data.date}`;
+
+    // Absentees
+    const list = document.getElementById('absenteesList');
+    if (data.absentees.length === 0) {
+        list.innerHTML = '<div class="list-group-item text-success text-center"><i class="bi bi-check-circle"></i> No absentees today</div>';
+    } else {
+        list.innerHTML = data.absentees.map(a => `
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <div class="fw-semibold">${a.student_name}</div>
+                        <small class="text-muted">${a.admission_number}</small>
+                    </div>
+                    <span class="badge ${a.communicated === 'yes' ? 'bg-success' : (a.communicated === 'no' ? 'bg-danger' : 'bg-secondary')} status-badge">
+                        ${a.communicated === 'yes' ? 'Informed' : (a.communicated === 'no' ? 'Not informed' : 'Unknown')}
+                    </span>
+                </div>
+                <div class="mt-1 small">
+                    <strong>Reason:</strong> ${a.reason || 'Not specified'}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Load activities
+    const actRes = await api(`/api/activities/${classId}?date=${date}`);
+    const activities = await actRes.json();
+    const actList = document.getElementById('activitiesList');
+
+    if (activities.length === 0) {
+        actList.innerHTML = '<div class="list-group-item text-muted text-center">No activities recorded for this day</div>';
+    } else {
+        actList.innerHTML = activities.map(a => `
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between">
+                    <strong class="text-navy">${a.subject_name}</strong>
+                    <small class="text-muted">${a.recorded_by_name}</small>
+                </div>
+                <div class="mt-1">${a.description}</div>
+                ${a.participation_notes ? `<div class="mt-1 small text-muted"><em>${a.participation_notes}</em></div>` : ''}
+            </div>
+        `).join('');
+    }
+
+        // Load subject attendance overview
+    try {
+        const subRes = await api(`/api/subject-attendance/report/${classId}?date=${date}`);
+        const subData = await subRes.json();
+        const subList = document.getElementById('subjectAttendanceList');
+
+        if (!subRes.ok || !subData.students || subData.students.length === 0) {
+            subList.innerHTML = '<div class="list-group-item text-muted text-center">No subject attendance recorded for this day</div>';
+        } else {
+            subList.innerHTML = subData.students.map(s => {
+                const attended = s.subjects_attended.map(x => x.subject_name).join(', ') || 'None';
+                const missed = s.subjects_missed.length === 0
+                    ? '<span class="text-success">None</span>'
+                    : s.subjects_missed.map(x => 
+                        `<span class="text-danger">${x.subject_name}</span> (${x.reason || 'No reason'})`
+                      ).join(', ');
+
+                return `
+                    <div class="list-group-item">
+                        <div class="fw-semibold">${s.full_name} <small class="text-muted">(${s.admission_number})</small></div>
+                        <div class="small mt-1"><strong>Attended:</strong> ${attended}</div>
+                        <div class="small"><strong>Missed:</strong> ${missed}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+    } catch (e) {
+        document.getElementById('subjectAttendanceList').innerHTML = 
+            '<div class="list-group-item text-muted text-center">Could not load subject attendance</div>';
+    }
+
+    document.getElementById('emptyState').classList.add('d-none');
+    document.getElementById('reportContainer').classList.remove('d-none');
+}
+
+async function downloadExcel() {
+    const classId = document.getElementById('classSelect').value;
+    const date = document.getElementById('reportDate').value;
+    
+    if (!classId || !date) {
+        alert('Please select class and date first, then click View');
+        return;
+    }
+
+    const btn = document.getElementById('downloadBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Preparing Excel...';
+
+    try {
+        const token = getToken();
+        const response = await fetch(`/api/report/${classId}/excel?date=${date}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            let errorMsg = 'Download failed';
+            try {
+                const errData = await response.json();
+                errorMsg = errData.detail || errorMsg;
+            } catch (e) {}
+            throw new Error(errorMsg);
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Daily_Report_${date}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+    } catch (err) {
+        alert('Failed to download Excel: ' + err.message);
+        console.error(err);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-file-earmark-excel"></i> Download Excel Report';
+    }
+}
+
+loadClasses();
+</script>
+{% endblock %}

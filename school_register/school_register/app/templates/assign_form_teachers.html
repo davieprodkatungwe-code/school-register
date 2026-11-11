@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Assign Form Teachers – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3 text-navy">Assign Form Teachers</h4>
+<p class="text-muted small">Admin can assign one Form Teacher to each class.</p>
+
+<div class="card">
+    <div class="card-header bg-white fw-semibold text-navy">
+        Classes & Form Teachers
+    </div>
+    <div class="list-group list-group-flush" id="classesList">
+        <div class="list-group-item text-muted text-center">Loading...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let teachers = [];
+
+async function loadData() {
+    try {
+        // Load teachers (users with teacher-related roles)
+        const usersRes = await api('/api/auth/users');
+        if (!usersRes.ok) throw new Error('Failed to load users. Are you logged in as Admin?');
+        const users = await usersRes.json();
+        teachers = users.filter(u => u.is_active && ['teacher', 'form_teacher', 'head_teacher'].includes(u.role));
+
+        // Load classes
+        const classRes = await api('/api/classes-with-teachers');
+        const classes = await classRes.json();
+
+        const list = document.getElementById('classesList');
+        list.innerHTML = classes.map(c => `
+            <div class="list-group-item">
+                <div class="fw-semibold mb-2">${c.name}</div>
+                <div class="row g-2 align-items-center">
+                    <div class="col-8">
+                        <select class="form-select form-select-sm" id="teacher-${c.id}">
+                            <option value="">-- No Form Teacher --</option>
+                            ${teachers.map(t => `
+                                <option value="${t.id}" ${c.form_teacher_id === t.id ? 'selected' : ''}>
+                                    ${t.full_name} (${t.role})
+                                </option>
+                            `).join('')}
+                        </select>
+                    </div>
+                    <div class="col-4">
+                        <button class="btn btn-sm btn-primary w-100" onclick="assignTeacher(${c.id})">
+                            Save
+                        </button>
+                    </div>
+                </div>
+                ${c.form_teacher_name ? `<small class="text-success mt-1 d-block">Current: ${c.form_teacher_name}</small>` : '<small class="text-muted mt-1 d-block">Not assigned</small>'}
+            </div>
+        `).join('');
+    } catch (err) {
+        document.getElementById('classesList').innerHTML = `
+            <div class="list-group-item text-danger text-center">${err.message}</div>
+        `;
+    }
+}
+
+async function assignTeacher(classId) {
+    const select = document.getElementById(`teacher-${classId}`);
+    const teacherId = select.value;
+
+    if (!teacherId) {
+        alert('Please select a teacher');
+        return;
+    }
+
+    try {
+        const res = await api(`/api/classes/${classId}/form-teacher?teacher_id=${teacherId}`, {
+            method: 'PUT'
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to assign');
+
+        alert(data.message);
+        loadData();
+    } catch (err) {
+        alert('Error: ' + err.message);
+    }
+}
+
+loadData();
+</script>
+{% endblock %}

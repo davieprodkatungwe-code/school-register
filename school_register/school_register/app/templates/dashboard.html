@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Dashboard – High Profile Private Secondary School{% endblock %}
+
+{% block content %}
+<div class="school-header">
+    <h5>High Profile Private Secondary School</h5>
+    <small>Attendance & Class Activities System</small>
+</div>
+
+<div class="mb-3">
+    <h5 class="fw-bold mb-1 text-navy">Welcome back</h5>
+    <p class="text-muted mb-0" id="todayDate"></p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6">
+        <a href="/mark-attendance" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-pencil-square text-navy" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Mark Attendance</h6>
+            </div>
+        </a>
+    </div>
+    <div class="col-6">
+        <a href="/activities" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-journal-text text-primary" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Class Activities</h6>
+            </div>
+        </a>
+    </div>
+    <div class="col-6">
+        <a href="/assessments" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-clipboard-data text-danger" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Assessments & Grades</h6>
+            </div>
+        </a>
+    </div>
+    <div class="col-6">
+        <a href="/report" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-file-earmark-bar-graph text-success" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Daily Report</h6>
+            </div>
+        </a>
+    </div>
+    <div class="col-6">
+        <a href="/manage-students" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-people text-info" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Manage Students</h6>
+            </div>
+        </a>
+    </div>
+    <div class="col-6">
+        <a href="/notifications" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-bell text-warning" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Parent Notifications</h6>
+            </div>
+        </a>
+    </div>
+    <div class="col-6">
+        <a href="/mark-subject-attendance" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-journal-check text-primary" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Subject Attendance</h6>
+            </div>
+        </a>
+    </div>
+       <div class="col-6">
+        <a href="/change-password" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-key text-secondary" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Change Password</h6>
+            </div>
+        </a>
+    </div>
+
+    <!-- Fees - visible to Bursar, Admin, Head Teacher -->
+    <div class="col-6 d-none" id="feesCard">
+        <a href="/fees" class="card text-decoration-none h-100">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-cash-coin text-success" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Fees Management</h6>
+                <small class="text-muted">Bursar / Admin</small>
+            </div>
+        </a>
+    </div>
+
+    <!-- Admin only -->
+    <div class="col-6 d-none" id="adminUsersCard">
+        <a href="/manage-users" class="card text-decoration-none h-100 border-primary">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-person-gear text-primary" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Manage Users</h6>
+                <small class="text-muted">Admin only</small>
+            </div>
+        </a>
+    </div>
+    <div class="col-6 d-none" id="adminAssignCard">
+        <a href="/assign-form-teachers" class="card text-decoration-none h-100 border-primary">
+            <div class="card-body text-center py-4">
+                <i class="bi bi-person-check text-primary" style="font-size: 2.2rem;"></i>
+                <h6 class="mt-2 mb-0 text-dark">Assign Form Teachers</h6>
+                <small class="text-muted">Admin only</small>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-white fw-semibold text-navy">
+        <i class="bi bi-info-circle"></i> How to use the system
+    </div>
+    <div class="card-body">
+        <ul class="mb-0 small">
+            <li><strong>Mark Attendance</strong> – Record who is present or absent for the day.</li>
+            <li><strong>Class Activities</strong> – Record assignments, exercises or work done in each subject.</li>
+            <li><strong>Assessments & Grades</strong> – Create tests and enter student marks.</li>
+            <li><strong>Daily Report</strong> – Form teachers can view and download the consolidated report.</li>
+            <li><strong>Manage Students</strong> – Add real students and remove demo ones.</li>
+            <li><strong>Parent Notifications</strong> – See parents to contact when students are absent.</li>
+            <li id="adminTip" class="d-none"><strong>Manage Users / Assign Form Teachers</strong> – Admin only.</li>
+        </ul>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('todayDate').textContent = new Date().toLocaleDateString('en-GB', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+});
+
+async function checkAdmin() {
+    try {
+        const res = await api('/api/auth/me');
+        if (res.ok) {
+            const user = await res.json();
+            if (user.role === 'admin') {
+                document.getElementById('adminUsersCard').classList.remove('d-none');
+                document.getElementById('adminAssignCard').classList.remove('d-none');
+                document.getElementById('adminTip').classList.remove('d-none');
+            }
+            if (['admin', 'bursar', 'head_teacher'].includes(user.role)) {
+                document.getElementById('feesCard').classList.remove('d-none');
+            }
+        }
+    } catch (e) {}
+}
+
+checkAdmin();
+</script>
+{% endblock %}

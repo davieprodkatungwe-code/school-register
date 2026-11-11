@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Students{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-3">Students</h4>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <label class="form-label small fw-semibold">Select Class</label>
+        <select id="classSelect" class="form-select form-select-lg" onchange="loadStudents()">
+            <option value="">Choose a class...</option>
+        </select>
+    </div>
+</div>
+
+<div id="studentsContainer" class="d-none">
+    <div class="card">
+        <div class="card-header bg-white d-flex justify-content-between">
+            <span class="fw-semibold" id="classTitle">Students</span>
+            <span class="badge bg-primary" id="countBadge">0</span>
+        </div>
+        <div class="list-group list-group-flush" id="studentsList"></div>
+    </div>
+</div>
+
+<div id="emptyState" class="text-center text-muted py-5">
+    <i class="bi bi-people" style="font-size: 3rem;"></i>
+    <p class="mt-2">Select a class to view students</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadClasses() {
+    const res = await api('/api/classes');
+    const classes = await res.json();
+    const select = document.getElementById('classSelect');
+    classes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = c.name;
+        select.appendChild(opt);
+    });
+}
+
+async function loadStudents() {
+    const classId = document.getElementById('classSelect').value;
+    if (!classId) return;
+
+    const res = await api(`/api/classes/${classId}/students`);
+    const students = await res.json();
+
+    document.getElementById('classTitle').textContent = document.getElementById('classSelect').selectedOptions[0].text;
+    document.getElementById('countBadge').textContent = students.length + ' students';
+
+    const list = document.getElementById('studentsList');
+    list.innerHTML = students.map(s => `
+        <div class="list-group-item">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <div class="fw-semibold">${s.full_name}</div>
+                    <small class="text-muted">${s.admission_number} · ${s.gender || ''}</small>
+                </div>
+                <small class="text-muted">${s.parent_phone || ''}</small>
+            </div>
+        </div>
+    `).join('');
+
+    document.getElementById('emptyState').classList.add('d-none');
+    document.getElementById('studentsContainer').classList.remove('d-none');
+}
+
+loadClasses();
+</script>
+{% endblock %}
